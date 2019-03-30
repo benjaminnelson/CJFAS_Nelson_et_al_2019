@@ -1,0 +1,69 @@
+model
+	{
+		# Distance relationships
+		for(i in 1:nstocks){
+		for(j in 1:nstocks){
+		
+			phi_q[i,j]<- step(-1*step(0-abs(i-j)))*exp(-1*pairwise_d[i,j]*omega_q)  # From Su et al. 2004, Equation 6
+			
+		 	}
+		}
+		
+		# Loop over individual stocks
+		for (i in 1:nstocks)
+			{	
+				# Parameters in hierarchical form
+				q_seal[i]~dnorm(mean_q[i], prec_q[i])
+				
+				h_hatch[i]~dnorm(mean_h, tau_h)
+				rho[i]~dunif(-1,1)
+				
+				# Priors on ricker b (non-hierarchical)
+				a_ricker[i]~dnorm(0,1.0E-6)
+				b_ricker[i]~dnorm(0,1.0E-6)
+				
+				tau[i]~dgamma(0.01,0.01)
+				sd_tau[i]<- 1/sqrt(tau[i])
+				
+				# CAR priors; Su et al. 2004 Equation 5
+				mean_q[i]<- inprod(phi_q[i,], q_seal[])/sum(phi_q[i,])
+				prec_q[i]<- tau_q/sum(phi_q[i,])
+			}
+			
+		# Global h hyper-prior	
+		mean_h~dnorm(0,1.0E-6)	
+		
+		# Hyper-prior on distance parameter
+		omega_q~dunif(0,2)            # From Su et al. 2004
+		
+		
+		# Normal likelihood function
+				lnrs_obs[1]~dnorm(lnrs[1], tau[stock_id[1]])
+				# Linearized Ricker model with seal covariate
+				lnrs[1]<- mu[1]
+				mu[1]<- a_ricker[stock_id[1]]+(b_ricker[stock_id[1]]*spawners[1])+(q_seal[stock_id[1]]*seals[1])+(h_hatch[stock_id[1]]*hatch[1])
+						
+				# Posterior predictive dists
+				ppred_lnrs[1]~dnorm(lnrs[1], tau[stock_id[1]])
+
+		# Loop over all observations
+
+		for(i in 2:nobs)
+			{
+				# Normal likelihood function
+				lnrs_obs[i]~dnorm(lnrs[i], tau[stock_id[i]])
+				# Linearized Ricker model with seal covariate
+				lnrs[i]<- mu[i]+rho[stock_id[i]]*(lnrs[i-1]-lnrs_obs[i-1])*start_id[i]
+				mu[i]<- a_ricker[stock_id[i]]+(b_ricker[stock_id[i]]*spawners[i])+(q_seal[stock_id[i]]*seals[i])+(h_hatch[stock_id[i]]*hatch[i])
+				
+				# Posterior predictive dists
+				ppred_lnrs[i]~dnorm(lnrs[i], tau[stock_id[i]])
+			}
+		
+		# Priors for precision/variance parameters
+		tau_q~dgamma(0.01,0.01)
+		tau_h~dgamma(0.01,0.01)
+		sd_h<- 1/sqrt(tau_h)		
+		sd_q<- 1/sqrt(tau_q)	
+		
+	}
